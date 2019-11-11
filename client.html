@@ -13,20 +13,20 @@
 
       // Set event handlers.
       ws.onopen = function() {
-        output("onopen");
+        output("websocket open");
       };
       
       ws.onmessage = function(e) {
         // e.data contains received string.
-        output("onmessage: " + e.data);
+        output("message from client: " + e.data);
       };
       
       ws.onclose = function() {
-        output("onclose");
+        output("websocket closed");
       };
 
       ws.onerror = function(e) {
-        output("onerror");
+        output("error");
         console.log(e)
       };
 

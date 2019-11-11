@@ -3,4 +3,3 @@
 .pytest_cache
 .tox
 .env
-*.egg-info

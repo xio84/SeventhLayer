@@ -1,6 +1,3 @@
-# Author: Johan Hanssen Seferidis
-# License: MIT
-
 import sys
 import struct
 from base64 import b64encode
@@ -48,49 +45,9 @@ OPCODE_PING         = 0x9
 OPCODE_PONG         = 0xA
 
 
-# -------------------------------- API ---------------------------------
-
-class API():
-
-    def run_forever(self):
-        try:
-            logger.info("Listening on port %d for clients.." % self.port)
-            self.serve_forever()
-        except KeyboardInterrupt:
-            self.server_close()
-            logger.info("Server terminated.")
-        except Exception as e:
-            logger.error(str(e), exc_info=True)
-            exit(1)
-
-    def new_client(self, client, server):
-        pass
-
-    def client_left(self, client, server):
-        pass
-
-    def message_received(self, client, server, message):
-        pass
-
-    def set_fn_new_client(self, fn):
-        self.new_client = fn
-
-    def set_fn_client_left(self, fn):
-        self.client_left = fn
-
-    def set_fn_message_received(self, fn):
-        self.message_received = fn
-
-    def send_message(self, client, msg):
-        self._unicast_(client, msg)
-
-    def send_message_to_all(self, msg):
-        self._multicast_(msg)
-
-
 # ------------------------- Implementation -----------------------------
 
-class WebsocketServer(ThreadingMixIn, TCPServer, API):
+class WebsocketServer(ThreadingMixIn, TCPServer):
     """
 	A websocket server waiting for clients to connect.
 
@@ -115,6 +72,9 @@ class WebsocketServer(ThreadingMixIn, TCPServer, API):
     allow_reuse_address = True
     daemon_threads = True  # comment to keep threads alive until finished
 
+    message_or_binary = 0 # Message = 0, Binary = 1
+    message_buffer = ''
+    binary_buffer = bytearray()
     clients = []
     id_counter = 0
 
@@ -123,8 +83,25 @@ class WebsocketServer(ThreadingMixIn, TCPServer, API):
         TCPServer.__init__(self, (host, port), WebSocketHandler)
         self.port = self.socket.getsockname()[1]
 
-    def _message_received_(self, handler, msg):
-        self.message_received(self.handler_to_client(handler), self, msg)
+    def run_forever(self):
+        try:
+            logger.info("Listening on port %d for clients.." % self.port)
+            self.serve_forever()
+        except KeyboardInterrupt:
+            self.server_close()
+            logger.info("Server terminated.")
+        except Exception as e:
+            logger.error(str(e), exc_info=True)
+            exit(1)
+
+    def _message_received_(self, handler, msg, fin):
+        self.message_received(self.handler_to_client(handler), self, msg, fin)
+
+    def _binary_received_(self, handler, msg, fin):
+        self.binary_received(self.handler_to_client(handler), self, msg, fin)
+
+    def _continuation_received_(self, handler, msg, fin):
+        self.continuation_received(self.handler_to_client(handler), self, msg, fin)
 
     def _ping_received_(self, handler, msg):
         handler.send_pong(msg)
@@ -146,19 +123,34 @@ class WebsocketServer(ThreadingMixIn, TCPServer, API):
         client = self.handler_to_client(handler)
         self.client_left(client, self)
         if client in self.clients:
-            self.clients.remove(client)
-
-    def _unicast_(self, to_client, msg):
-        to_client['handler'].send_message(msg)
-
-    def _multicast_(self, msg):
-        for client in self.clients:
-            self._unicast_(client, msg)
+            self.clients.remove(client)        
 
     def handler_to_client(self, handler):
         for client in self.clients:
             if client['handler'] == handler:
                 return client
+
+    def set_new_client_handler(self, fn):
+        self.new_client = fn
+
+    def set_client_left_handler(self, fn):
+        self.client_left = fn
+
+    def set_message_received_handler(self, fn):
+        self.message_received = fn
+
+    def set_binary_received_handler(self, fn):
+        self.binary_received = fn
+
+    def set_continuation_received_handler(self, fn):
+        self.continuation_received = fn
+
+    def send_message(self, client, msg):
+        client['handler'].send_message(msg)
+
+    def send_message_to_all(self, msg):
+        for client in self.clients:
+            self._unicast_(client, msg)
 
 
 class WebSocketHandler(StreamRequestHandler):
@@ -214,11 +206,9 @@ class WebSocketHandler(StreamRequestHandler):
             self.keep_alive = 0
             return
         if opcode == OPCODE_CONTINUATION:
-            logger.warn("Continuation frames are not supported.")
-            return
+            opcode_handler = self.server._continuation_received_
         elif opcode == OPCODE_BINARY:
-            logger.warn("Binary frames are not supported.")
-            return
+            opcode_handler = self.server._binary_received_
         elif opcode == OPCODE_TEXT:
             opcode_handler = self.server._message_received_
         elif opcode == OPCODE_PING:
@@ -240,7 +230,7 @@ class WebSocketHandler(StreamRequestHandler):
         for message_byte in self.read_bytes(payload_length):
             message_byte ^= masks[len(message_bytes) % 4]
             message_bytes.append(message_byte)
-        opcode_handler(self, message_bytes.decode('utf8'))
+        opcode_handler(self, message_bytes, fin)
 
     def send_message(self, message):
         self.send_text(message)
@@ -249,11 +239,6 @@ class WebSocketHandler(StreamRequestHandler):
         self.send_text(message, OPCODE_PONG)
 
     def send_text(self, message, opcode=OPCODE_TEXT):
-        """
-        Important: Fragmented(=continuation) messages are not supported since
-        their usage cases are limited - when we don't know the payload length.
-        """
-
         # Validate message
         if isinstance(message, bytes):
             message = try_decode_UTF8(message)  # this is slower but ensures we have UTF-8
@@ -277,20 +262,129 @@ class WebSocketHandler(StreamRequestHandler):
             header.append(FIN | opcode)
             header.append(payload_length)
 
-        # Extended payload
-        elif payload_length >= 126 and payload_length <= 65535:
-            header.append(FIN | opcode)
-            header.append(PAYLOAD_LEN_EXT16)
-            header.extend(struct.pack(">H", payload_length))
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+            # header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
 
-        # Huge extended payload
-        elif payload_length < 18446744073709551616:
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
+
+        else:
+            header.append(0x00 | opcode)
+            header.append(125)
+            # header.extend(struct.pack(125))
+            self.request.send(header + payload[:125])
+            # logger.info("Need to continue.")
+            self.continue_send_text(payload[125:])
+            return
+
+        self.request.send(header + payload)
+
+    def continue_send_text(self, message, opcode=OPCODE_CONTINUATION):
+        # Validate message
+        if isinstance(message, bytes):
+            message = try_decode_UTF8(message)  # this is slower but ensures we have UTF-8
+            if not message:
+                logger.warning("Can\'t send message, message is not valid UTF-8")
+                return False
+        elif sys.version_info < (3,0) and (isinstance(message, str) or isinstance(message, unicode)):
+            pass
+        elif isinstance(message, str):
+            pass
+        else:
+            logger.warning('Can\'t send message, message has to be a string or bytes. Given type is %s' % type(message))
+            return False
+
+        header  = bytearray()
+        payload = encode_to_UTF8(message)
+        payload_length = len(payload)
+
+        # Normal payload
+        if payload_length <= 125:
             header.append(FIN | opcode)
-            header.append(PAYLOAD_LEN_EXT64)
-            header.extend(struct.pack(">Q", payload_length))
+            header.append(payload_length)
+
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
+
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
+
+        else:
+            header.append(0x00 | opcode)
+            header.append(125)
+            # header.extend(struct.pack(payload_length))
+            self.request.send(header + payload[:125])
+            self.continue_send_text(payload[125:])
+            return
+
+        self.request.send(header + payload)
+
+    def send_binary(self, message, opcode=OPCODE_BINARY):
+        header  = bytearray()
+        payload = message
+        payload_length = len(payload)
+
+        # Normal payload
+        if payload_length <= 125:
+            header.append(FIN | opcode)
+            header.append(payload_length)
+
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
+
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
 
         else:
             raise Exception("Message is too big. Consider breaking it into chunks.")
+            return
+
+        self.request.send(header + payload)
+
+    def continue_send_binary(self, message, opcode=OPCODE_CONTINUATION):
+        header  = bytearray()
+        payload = message
+        payload_length = len(payload)
+
+        # Normal payload
+        if payload_length <= 125:
+            header.append(FIN | opcode)
+            header.append(payload_length)
+
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
+
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
+
+        else:
+            header.append(0x00 | opcode)
+            header.append(125)
+            self.request.send(header + payload[:125])
             return
 
         self.request.send(header + payload)
@@ -312,6 +406,7 @@ class WebSocketHandler(StreamRequestHandler):
     def handshake(self):
         headers = self.read_http_headers()
 
+        # Make sure client is ready for websocket
         try:
             assert headers['upgrade'].lower() == 'websocket'
         except AssertionError:
