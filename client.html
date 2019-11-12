@@ -1,10 +1,25 @@
 <html>
-<head>
-  <title>Simple client</title>
-
-  <script type="text/javascript">
+  <head>
+    <title>Simple client</title>
+    
+    <script type="text/javascript">
 
     var ws;
+    var textFile = null,
+    makeTextFile = function (zip) {
+      var data = new Blob([zip], {type: 'application/zip'});
+    
+      // If we are replacing a previously generated file we need to
+      // manually revoke the object URL to avoid memory leaks.
+      if (textFile !== null) {
+        window.URL.revokeObjectURL(textFile);
+      }
+    
+      textFile = window.URL.createObjectURL(data);
+    
+      // returns a URL you can use as a href
+      return textFile;
+    };
     
     function init() {
 
@@ -18,7 +33,13 @@
       
       ws.onmessage = function(e) {
         // e.data contains received string.
-        output("message from client: " + e.data);
+        // if (e.data instanceof str){
+          output("message from client: " + e.data);
+        // } else {
+          // var link = document.getElementById('downloadlink');
+          // link.href = makeTextFile(e.data);
+          // link.style.display = 'block';
+        // }
       };
       
       ws.onclose = function() {
@@ -45,6 +66,30 @@
       ws.close();
     }
     
+
+    function onSubmission() {
+      ws.send("!submission");
+      output("Submitting...");
+    }
+
+    function sendFile() {
+      var file = document.getElementById('filename').files[0];
+      ws.binaryType = "arraybuffer";
+      //ws.send('filename:'+file.name);
+      var reader = new FileReader();
+      var rawData = new ArrayBuffer();           
+      console.log(file.name);
+      reader.loadend = function() {
+      }
+      reader.onload = function(e) {
+          rawData = e.target.result;
+          ws.send(rawData);
+          console.log("the File has been transferred.")
+          //ws.send('end');
+      }
+      reader.readAsArrayBuffer(file);
+    }
+
     function output(str) {
       var log = document.getElementById("log");
       var escaped = str.replace(/&/, "&amp;").replace(/</, "&lt;").
@@ -58,7 +103,11 @@
   <form onsubmit="onSubmit(); return false;">
     <input type="text" id="input">
     <input type="submit" value="Send">
+    <input type="file" id="filename" />
     <button onclick="onCloseClick(); return false;">close</button>
+    <button onclick="onSubmission(); return false;">submission</button>
+    <button onclick="sendFile(); return false;">check</button>
+    <a download="submission.zip" id="downloadlink" style="display: none">Download</a>
   </form>
   <div id="log"></div>
 </body>

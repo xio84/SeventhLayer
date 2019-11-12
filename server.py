@@ -51,7 +51,7 @@ def binary_handler(client, server, message, fin):
 
 		# Return response
 		digests = []
-		for filename in ['canvas.png', 'img5.png']:
+		for filename in ['download/submission.zip', 'upload/submission.zip']:
 			hasher = hashlib.md5()
 			with open(filename, 'rb') as f:
 				buf = f.read()
@@ -63,7 +63,7 @@ def binary_handler(client, server, message, fin):
 		if (digests[0] == digests[1]):
 			server.send_message(client, '1')
 		else:
-			server.send_message(client, '1')
+			server.send_message(client, '0')
 
 	else:
 		server.binary_buffer += message
@@ -80,7 +80,7 @@ def continuation_handler(client, server, message, fin):
 
 			# Return response
 			digests = []
-			for filename in ['canvas.png', 'img5.png']:
+			for filename in ['download/submission.zip', 'upload/submission.zip']:
 				hasher = hashlib.md5()
 				with open(filename, 'rb') as f:
 					buf = f.read()
@@ -92,7 +92,7 @@ def continuation_handler(client, server, message, fin):
 			if (digests[0] == digests[1]):
 				server.send_message(client, '1')
 			else:
-				server.send_message(client, '1')
+				server.send_message(client, '0')
 		else:
 			server.binary_buffer += message
 	else:
