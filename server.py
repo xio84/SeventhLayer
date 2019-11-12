@@ -1,5 +1,6 @@
 from websocket_server import *
 import os
+import hashlib
 
 SIZE_LIMIT = 125
 
@@ -18,24 +19,24 @@ def client_left(client, server):
 def message_handler(client, server, message, fin):
 	message = message.decode('utf-8')
 	if (fin):
-		if (' ' in message):
-			(command, content) = message.split(' ', 1)
-			(command, content) = (command.strip(), content.strip())
-			if (command == '!echo'):
+		if (message[:5] == '!echo'):
+			if (' ' in message):
+				(command, content) = message.split(' ', 1)
+				(command, content) = (command.strip(), content.strip())
 				server.send_message(client, content)
-			if (command == '!submission'):
-				file_request = 'upload/submission.zip'
-				f = open(file_request, 'rb')
+		if (message[:11] == '!submission'):
+			file_request = 'upload/submission.zip'
+			f = open(file_request, 'rb')
+			buf = f.read(SIZE_LIMIT)
+			packet_data = bytearray(buf)
+			server.send_binary(client, packet_data)
+			while (True):
 				buf = f.read(SIZE_LIMIT)
+				if not buf:
+					break
 				packet_data = bytearray(buf)
-				server.send_binary(client, packet_data)
-				while (True):
-					buf = f.read(SIZE_LIMIT)
-					if not buf:
-						break
-					packet_data = bytearray(buf)
-					server.send_continuation(client, packet_data)
-				f.close()
+				server.send_continuation(client, packet_data)
+			f.close()
 	else:
 		server.message_buffer += message
 		server.message_or_binary = 0
@@ -47,6 +48,23 @@ def binary_handler(client, server, message, fin):
 		f = open(file_request, 'wb')
 		f.write(message)
 		f.close()
+
+		# Return response
+		digests = []
+		for filename in ['canvas.png', 'img5.png']:
+			hasher = hashlib.md5()
+			with open(filename, 'rb') as f:
+				buf = f.read()
+				hasher.update(buf)
+				a = hasher.hexdigest()
+				digests.append(a)
+				print(a)
+
+		if (digests[0] == digests[1]):
+			server.send_message(client, '1')
+		else:
+			server.send_message(client, '1')
+
 	else:
 		server.binary_buffer += message
 		server.message_or_binary = 1
@@ -59,6 +77,22 @@ def continuation_handler(client, server, message, fin):
 			f = open(file_request, 'wb')
 			f.write(message)
 			f.close()
+
+			# Return response
+			digests = []
+			for filename in ['canvas.png', 'img5.png']:
+				hasher = hashlib.md5()
+				with open(filename, 'rb') as f:
+					buf = f.read()
+					hasher.update(buf)
+					a = hasher.hexdigest()
+					digests.append(a)
+					print(a)
+
+			if (digests[0] == digests[1]):
+				server.send_message(client, '1')
+			else:
+				server.send_message(client, '1')
 		else:
 			server.binary_buffer += message
 	else:
