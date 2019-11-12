@@ -148,6 +148,12 @@ class WebsocketServer(ThreadingMixIn, TCPServer):
     def send_message(self, client, msg):
         client['handler'].send_message(msg)
 
+    def send_binary(self, client, msg):
+        client['handler'].send_binary(msg)
+
+    def send_continuation(self, client, msg):
+        client['handler'].continue_send_binary(msg)
+
     def send_message_to_all(self, msg):
         for client in self.clients:
             self._unicast_(client, msg)
@@ -279,7 +285,7 @@ class WebSocketHandler(StreamRequestHandler):
             header.append(125)
             # header.extend(struct.pack(125))
             self.request.send(header + payload[:125])
-            # logger.info("Need to continue.")
+            # logger.warning("Need to continue.")
             self.continue_send_text(payload[125:])
             return
 
@@ -337,35 +343,7 @@ class WebSocketHandler(StreamRequestHandler):
         payload_length = len(payload)
 
         # Normal payload
-        if payload_length <= 125:
-            header.append(FIN | opcode)
-            header.append(payload_length)
-
-        # # Extended payload
-        # elif payload_length >= 126 and payload_length <= 65535:
-        #     header.append(FIN | opcode)
-        #     header.append(PAYLOAD_LEN_EXT16)
-        #     header.extend(struct.pack(">H", payload_length))
-
-        # # Huge extended payload
-        # elif payload_length < 18446744073709551616:
-        #     header.append(FIN | opcode)
-        #     header.append(PAYLOAD_LEN_EXT64)
-        #     header.extend(struct.pack(">Q", payload_length))
-
-        else:
-            raise Exception("Message is too big. Consider breaking it into chunks.")
-            return
-
-        self.request.send(header + payload)
-
-    def continue_send_binary(self, message, opcode=OPCODE_CONTINUATION):
-        header  = bytearray()
-        payload = message
-        payload_length = len(payload)
-
-        # Normal payload
-        if payload_length <= 125:
+        if payload_length < 125:
             header.append(FIN | opcode)
             header.append(payload_length)
 
@@ -384,7 +362,41 @@ class WebSocketHandler(StreamRequestHandler):
         else:
             header.append(0x00 | opcode)
             header.append(125)
+            # header.extend(struct.pack(payload_length))
             self.request.send(header + payload[:125])
+            # self.continue_send_binary(payload[125:])
+            return
+
+        self.request.send(header + payload)
+
+    def continue_send_binary(self, message, opcode=OPCODE_CONTINUATION):
+        header  = bytearray()
+        payload = message
+        payload_length = len(payload)
+
+        # Normal payload
+        if payload_length < 125:
+            header.append(FIN | opcode)
+            header.append(payload_length)
+
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
+
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
+
+        else:
+            header.append(0x00 | opcode)
+            header.append(125)
+            # header.extend(struct.pack(payload_length))
+            self.request.send(header + payload[:125])
+            # self.continue_send_binary(payload[125:])
             return
 
         self.request.send(header + payload)
