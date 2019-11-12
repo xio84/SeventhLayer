@@ -5,11 +5,7 @@ from hashlib import sha1
 import logging
 from socket import error as SocketError
 import errno
-
-if sys.version_info[0] < 3:
-    from SocketServer import ThreadingMixIn, TCPServer, StreamRequestHandler
-else:
-    from socketserver import ThreadingMixIn, TCPServer, StreamRequestHandler
+from socketserver import ThreadingMixIn, TCPServer, StreamRequestHandler
 
 logger = logging.getLogger(__name__)
 logging.basicConfig()
@@ -181,10 +177,7 @@ class WebSocketHandler(StreamRequestHandler):
     def read_bytes(self, num):
         # python3 gives ordinal of byte directly
         bytes = self.rfile.read(num)
-        if sys.version_info[0] < 3:
-            return map(ord, bytes)
-        else:
-            return bytes
+        return bytes
 
     def read_next_message(self):
         try:
@@ -251,8 +244,6 @@ class WebSocketHandler(StreamRequestHandler):
             if not message:
                 logger.warning("Can\'t send message, message is not valid UTF-8")
                 return False
-        elif sys.version_info < (3,0) and (isinstance(message, str) or isinstance(message, unicode)):
-            pass
         elif isinstance(message, str):
             pass
         else:
@@ -298,8 +289,6 @@ class WebSocketHandler(StreamRequestHandler):
             if not message:
                 logger.warning("Can\'t send message, message is not valid UTF-8")
                 return False
-        elif sys.version_info < (3,0) and (isinstance(message, str) or isinstance(message, unicode)):
-            pass
         elif isinstance(message, str):
             pass
         else:
@@ -437,17 +426,15 @@ class WebSocketHandler(StreamRequestHandler):
         self.valid_client = True
         self.server._new_client_(self)
 
-    @classmethod
-    def make_handshake_response(cls, key):
+    def make_handshake_response(self, key):
         return \
           'HTTP/1.1 101 Switching Protocols\r\n'\
           'Upgrade: websocket\r\n'              \
           'Connection: Upgrade\r\n'             \
           'Sec-WebSocket-Accept: %s\r\n'        \
-          '\r\n' % cls.calculate_response_key(key)
+          '\r\n' % self.calculate_response_key(key)
 
-    @classmethod
-    def calculate_response_key(cls, key):
+    def calculate_response_key(self, key):
         GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
         hash = sha1(key.encode() + GUID.encode())
         response_key = b64encode(hash.digest()).strip()
