@@ -283,10 +283,10 @@ class WebSocketHandler(StreamRequestHandler):
         else:
             header.append(0x00 | opcode)
             header.append(PAYLOAD_LEN_EXT64)
-            header.extend(struct.pack(">Q", 18446744073709551616))
+            header.extend(struct.pack(">Q", 18446744073709551615))
             # header.extend(struct.pack(payload_length))
-            self.request.send(header + payload[:18446744073709551616])
-            self.continue_send_text(payload[18446744073709551616:])
+            self.request.send(header + payload[:18446744073709551615])
+            self.continue_send_text(payload[18446744073709551615:])
             # self.continue_send_binary(payload[125:])
             return
 
@@ -331,10 +331,10 @@ class WebSocketHandler(StreamRequestHandler):
         else:
             header.append(0x00 | opcode)
             header.append(PAYLOAD_LEN_EXT64)
-            header.extend(struct.pack(">Q", 18446744073709551616))
+            header.extend(struct.pack(">Q", 18446744073709551615))
             # header.extend(struct.pack(payload_length))
-            self.request.send(header + payload[:18446744073709551616])
-            self.continue_send_text(payload[18446744073709551616:])
+            self.request.send(header + payload[:18446744073709551615])
+            self.continue_send_text(payload[18446744073709551615:])
             # self.continue_send_binary(payload[125:])
             return
 
@@ -365,15 +365,16 @@ class WebSocketHandler(StreamRequestHandler):
         else:
             header.append(0x00 | opcode)
             header.append(PAYLOAD_LEN_EXT64)
-            header.extend(struct.pack(">Q", 18446744073709551616))
+            header.extend(struct.pack(">Q", 18446744073709551615))
             # header.extend(struct.pack(payload_length))
-            self.request.send(header + payload[:18446744073709551616])
+            self.request.send(header + payload[:18446744073709551615])
             # self.continue_send_binary(payload[125:])
             return
 
         self.request.send(header + payload)
 
     def continue_send_binary(self, message, opcode=OPCODE_CONTINUATION):
+        # logger.warning("continuing...")
         header  = bytearray()
         payload = message
         payload_length = len(payload)
@@ -398,9 +399,9 @@ class WebSocketHandler(StreamRequestHandler):
         else:
             header.append(0x00 | opcode)
             header.append(PAYLOAD_LEN_EXT64)
-            header.extend(struct.pack(">Q", 18446744073709551616))
+            header.extend(struct.pack(">Q", 18446744073709551615))
             # header.extend(struct.pack(payload_length))
-            self.request.send(header + payload[:18446744073709551616])
+            self.request.send(header + payload[:18446744073709551615])
             # self.continue_send_binary(payload[125:])
             return
 

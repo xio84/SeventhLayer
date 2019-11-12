@@ -2,7 +2,7 @@ from websocket_server import *
 import os
 import hashlib
 
-SIZE_LIMIT = 125
+SIZE_LIMIT = 18446744073709551615
 
 # Called for every client connecting (after handshake)
 def new_client(client, server):
