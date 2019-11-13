@@ -74,7 +74,7 @@ class WebsocketServer(ThreadingMixIn, TCPServer):
     clients = []
     id_counter = 0
 
-    def __init__(self, port, host='127.0.0.1', loglevel=logging.WARNING):
+    def __init__(self, port, host='0.0.0.0', loglevel=logging.WARNING):
         logger.setLevel(loglevel)
         TCPServer.__init__(self, (host, port), WebSocketHandler)
         self.port = self.socket.getsockname()[1]
@@ -199,10 +199,12 @@ class WebSocketHandler(StreamRequestHandler):
         if opcode == OPCODE_CLOSE_CONN:
             logger.info("Client asked to close connection.")
             self.keep_alive = 0
+            self.send_close(1000)
             return
         if not masked:
             logger.warn("Client must always be masked.")
             self.keep_alive = 0
+            self.send_close(1002)
             return
         if opcode == OPCODE_CONTINUATION:
             opcode_handler = self.server._continuation_received_
@@ -229,6 +231,7 @@ class WebSocketHandler(StreamRequestHandler):
         for message_byte in self.read_bytes(payload_length):
             message_byte ^= masks[len(message_bytes) % 4]
             message_bytes.append(message_byte)
+        logger.warning(message_bytes)
         opcode_handler(self, message_bytes, fin)
 
     def send_message(self, message):
@@ -387,6 +390,30 @@ class WebSocketHandler(StreamRequestHandler):
             self.request.send(header + payload[:125])
             # self.continue_send_binary(payload[125:])
             return
+
+        self.request.send(header + payload)
+
+    def send_close(self, message, opcode=OPCODE_CLOSE_CONN):
+        header  = bytearray()
+        payload = message.to_bytes(2, byteorder='big')
+        payload_length = 2
+
+        # Normal payload
+        if payload_length <= 125:
+            header.append(FIN | opcode)
+            header.append(payload_length)
+
+        # # Extended payload
+        # elif payload_length >= 126 and payload_length <= 65535:
+        #     header.append(FIN | opcode)
+            # header.append(PAYLOAD_LEN_EXT16)
+        #     header.extend(struct.pack(">H", payload_length))
+
+        # # Huge extended payload
+        # elif payload_length < 18446744073709551616:
+        #     header.append(FIN | opcode)
+        #     header.append(PAYLOAD_LEN_EXT64)
+        #     header.extend(struct.pack(">Q", payload_length))
 
         self.request.send(header + payload)
 
