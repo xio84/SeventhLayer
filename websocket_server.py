@@ -231,7 +231,6 @@ class WebSocketHandler(StreamRequestHandler):
         for message_byte in self.read_bytes(payload_length):
             message_byte ^= masks[len(message_bytes) % 4]
             message_bytes.append(message_byte)
-        logger.warning(message_bytes)
         opcode_handler(self, message_bytes, fin)
 
     def send_message(self, message):

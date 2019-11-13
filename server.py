@@ -18,6 +18,7 @@ def client_left(client, server):
 # Message handler
 def message_handler(client, server, message, fin):
 	message = message.decode('utf-8')
+	print(message)
 	if (fin):
 		if (message[:5] == '!echo'):
 			if (' ' in message):
