@@ -39,8 +39,8 @@ def message_handler(client, server, message, fin):
 				server.send_continuation(client, packet_data)
 			f.close()
 	else:
-		server.message_buffer += message
-		server.message_or_binary = 0
+		client['handler'].message_buffer += message
+		client['handler'].message_or_binary = 0
 
 # Binary handler
 def binary_handler(client, server, message, fin):
@@ -67,12 +67,12 @@ def binary_handler(client, server, message, fin):
 			server.send_message(client, '0')
 
 	else:
-		server.binary_buffer += message
-		server.message_or_binary = 1
+		client['handler'].binary_buffer += message
+		client['handler'].message_or_binary = 1
 
 # Continuation handler
 def continuation_handler(client, server, message, fin):
-	if (server.message_or_binary):
+	if (client['handler'].message_or_binary):
 		if (fin):
 			file_request = 'download/submission.zip'
 			f = open(file_request, 'wb')
@@ -94,8 +94,9 @@ def continuation_handler(client, server, message, fin):
 				server.send_message(client, '1')
 			else:
 				server.send_message(client, '0')
+			client['handler'].binary_buffer = bytearray()
 		else:
-			server.binary_buffer += message
+			client['handler'].binary_buffer += message
 	else:
 		if (fin):
 			if (' ' in message):
@@ -103,8 +104,9 @@ def continuation_handler(client, server, message, fin):
 				(command, content) = (command.strip(), content.strip())
 				if (command == '!echo'):
 					server.send_message(client, content)
+			client['handler'].message_buffer = ''
 		else:
-			server.message_buffer += message
+			client['handler'].message_buffer += message
 
 
 PORT=9001

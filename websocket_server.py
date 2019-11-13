@@ -68,9 +68,6 @@ class WebsocketServer(ThreadingMixIn, TCPServer):
     allow_reuse_address = True
     daemon_threads = True  # comment to keep threads alive until finished
 
-    message_or_binary = 0 # Message = 0, Binary = 1
-    message_buffer = ''
-    binary_buffer = bytearray()
     clients = []
     id_counter = 0
 
@@ -157,6 +154,10 @@ class WebsocketServer(ThreadingMixIn, TCPServer):
 
 class WebSocketHandler(StreamRequestHandler):
 
+    message_or_binary = 0 # Message = 0, Binary = 1
+    message_buffer = ''
+    binary_buffer = bytearray()
+
     def __init__(self, socket, addr, server):
         self.server = server
         StreamRequestHandler.__init__(self, socket, addr, server)
@@ -199,12 +200,12 @@ class WebSocketHandler(StreamRequestHandler):
         if opcode == OPCODE_CLOSE_CONN:
             logger.info("Client asked to close connection.")
             self.keep_alive = 0
-            self.send_close(1000)
+            # self.send_close(1000)
             return
         if not masked:
             logger.warn("Client must always be masked.")
             self.keep_alive = 0
-            self.send_close(1002)
+            # self.send_close(1002)
             return
         if opcode == OPCODE_CONTINUATION:
             opcode_handler = self.server._continuation_received_
